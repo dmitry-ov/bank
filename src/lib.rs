@@ -16,10 +16,11 @@ pub struct Bank {
 }
 
 #[derive(Debug)]
-pub struct Operation {
-    from: String,
-    to: String,
-    amount: u64,
+pub enum Operation {
+    CreateAccount(String),
+    IncreaseAccount(String, u32),
+    DecreaseAccount(String, u32),
+    Transfer(String, String, u32),
 }
 
 #[derive(Debug)]
@@ -43,7 +44,8 @@ impl Bank {
     pub fn create_account(&mut self, account: String) -> Result<(), BankError> {
         if !self.accounts.contains(&account) {
             self.accounts.insert(account.clone());
-            self.balances.insert(account, 0);
+            self.balances.insert(account.clone(), 0);
+            self.history.push(Operation::CreateAccount(account));
             Ok(())
         } else {
             Err(AccountAlreadyExists(
@@ -75,7 +77,8 @@ impl Bank {
 
         let current_balance = self.balances.get(&account).unwrap();
         let new_balance = *current_balance + amount;
-        self.balances.insert(account, new_balance);
+        self.balances.insert(account.clone(), new_balance);
+        self.history.push(Operation::IncreaseAccount(account, amount));
         Ok(())
     }
 
@@ -96,7 +99,8 @@ impl Bank {
         }
 
         let new_balance = current_balance - amount;
-        self.balances.insert(account, new_balance);
+        self.balances.insert(account.clone(), new_balance);
+        self.history.push(Operation::DecreaseAccount(account, amount));
         Ok(())
     }
 
@@ -106,8 +110,13 @@ impl Bank {
         } else {
             self.decrease_account(from.clone(), amount)?;
             self.increase_account(to.clone(), amount)?;
+            self.history.push(Operation::Transfer(from, to, amount));
             Ok(())
         }
+    }
+
+    pub fn get_history(&self) -> &Vec<Operation> {
+        &self.history
     }
 }
 
@@ -245,6 +254,27 @@ mod tests {
         let _ = bank.increase_account("X".to_string(), 10);
         let x = bank.transfer("X".to_string(), "X".to_string(), 5);
         assert!(x.is_err());
+    }
+
+    #[test]
+    fn transfer_to_no_account() {
+        let mut bank = Bank::new();
+        let _ = bank.create_account("X".to_string());
+        let _ = bank.increase_account("X".to_string(), 10);
+        let x = bank.transfer("X".to_string(), "Y".to_string(), 5);
+        assert!(x.is_err());
+    }
+
+    #[test]
+    fn get_history() {
+        let mut bank = Bank::new();
+        let _ = bank.create_account("X".to_string());
+        // let _ = bank.increase_account("X".to_string(), 10);
+        // let _ = bank.transfer("X".to_string(), "Y".to_string(), 5);
+        let history = bank.get_history();
+        assert_eq!(1, history.len());
+        // assert_eq!(3, history.len());
+        println!( "{:?}",history)
     }
 }
 
