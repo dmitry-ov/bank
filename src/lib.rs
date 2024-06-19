@@ -16,6 +16,7 @@ pub struct Bank {
 }
 
 #[derive(Debug)]
+#[derive(PartialEq)]
 pub enum Operation {
     CreateAccount(String),
     IncreaseAccount(String, i32),
@@ -43,37 +44,37 @@ impl Bank {
 
     pub fn get_account_balance(&self, account: String) -> Result<i32, BankError> {
         if !self.accounts.contains(&account) {
-            return Err(AccountAlreadyExists(
-                format!(
-                    "Account {} does not exist", account)));
+            return Err(AccountAlreadyExists(format!("Account {} does not exist", account)));
         }
         let balance = *self.balances.get(&account).unwrap();
         Ok(balance)
     }
 
-    pub fn create_account(&mut self, account: String) -> Result<(), BankError> {
+    pub fn create_account(&mut self, account: String) -> Result<usize, BankError> {
         if !self.accounts.contains(&account) {
             self.accounts.insert(account.clone());
             self.balances.insert(account.clone(), 0);
-            self.history.push(Operation::CreateAccount(account));
-            Ok(())
+            let id = self.append_history(Operation::CreateAccount(account.clone()));
+            self.append_account_index(account, id);
+            Ok(id)
         } else {
-            Err(AccountAlreadyExists(
-                format!(
-                    "Account {} already exists", account)))
+            Err(AccountAlreadyExists(format!("Account {} already exists", account)))
         }
     }
 
-    pub fn increase_account(&mut self, account: String, amount: i32) -> Result<(), BankError> {
+    pub fn increase_account(&mut self, account: String, amount: i32) -> Result<usize, BankError> {
         self.update_balance_account(account.clone(), amount)?;
-        self.history.push(Operation::IncreaseAccount(account, amount));
-        Ok(())
+        let id = self.append_history(Operation::IncreaseAccount(account.clone(), amount)); //todo test
+        self.append_account_index(account, id); //todo test
+        Ok(id)
     }
 
-    pub fn decrease_account(&mut self, account: String, amount: i32) -> Result<(), BankError> {
-        self.update_balance_account(account.clone(), (-1) * amount)?;
-        self.history.push(Operation::DecreaseAccount(account, amount));
-        Ok(())
+    pub fn decrease_account(&mut self, account: String, amount: i32) -> Result<usize, BankError> {
+        let value = (-1) * amount;
+        self.update_balance_account(account.clone(), value)?;
+        let id = self.append_history(Operation::DecreaseAccount(account.clone(), value)); //todo test
+        self.append_account_index(account, id); //todo test
+        Ok(id)
     }
 
     pub fn transfer(&mut self, from: String, to: String, amount: i32) -> Result<(), BankError> {
@@ -82,8 +83,31 @@ impl Bank {
         } else {
             self.update_balance_account(from.clone(), (-1) * amount)?;
             self.update_balance_account(to.clone(), amount)?;
-            self.history.push(Operation::Transfer(from, to, amount));
+
+            let id = self.append_history(Operation::Transfer(from.clone(), to.clone(), amount)); //todo test
+
+            self.append_account_index(from, id); //todo test
+            self.append_account_index(to, id); //todo test
             Ok(())
+        }
+    }
+
+    pub fn get_history(&self) -> &Vec<Operation> {
+        &self.history
+    }
+
+    fn append_history(&mut self, operation: Operation) -> usize {
+        self.history.push(operation);
+        return self.history.len();
+    }
+
+    fn append_account_index(&mut self, account: String, id: usize) {
+        if self.account_operations_index.contains_key(&account) {
+            //для такого аккаунта есть индекс
+            self.account_operations_index.get_mut(&account).unwrap().push(id);
+        } else {
+            //для такого аккаунта нет индекса
+            self.account_operations_index.insert(account.clone(), vec![id]);
         }
     }
 
@@ -106,21 +130,27 @@ impl Bank {
         self.balances.insert(account.clone(), new_balance);
         Ok(())
     }
-
-    pub fn get_history(&self) -> &Vec<Operation> {
-        &self.history
-    }
 }
 
 
 #[cfg(test)]
 mod tests {
+    use std::io::stdout;
     use super::*;
 
     #[test]
-    fn create_account() {
+    fn create_bank(){
         let b = Bank::new();
         assert_eq!(0, b.history.len());
+        assert_eq!(0, b.account_operations_index.len());
+    }
+
+    #[test]
+    fn create_account() {
+        let mut b = Bank::new();
+        let _ = b.create_account("X".to_string());
+        assert_eq!(1, b.history.len());
+        assert_eq!(1, b.account_operations_index.len());
     }
 
     #[test]
@@ -167,7 +197,7 @@ mod tests {
 
     #[test]
     fn get_no_account_balance() {
-        let mut bank = Bank::new();
+        let bank = Bank::new();
         let x = bank.get_account_balance("X".to_string());
         assert!(x.is_err());
     }
@@ -260,13 +290,13 @@ mod tests {
     #[test]
     fn get_history() {
         let mut bank = Bank::new();
-        let _ = bank.create_account("X".to_string());
-        // let _ = bank.increase_account("X".to_string(), 10);
-        // let _ = bank.transfer("X".to_string(), "Y".to_string(), 5);
-        let history = bank.get_history();
-        assert_eq!(1, history.len());
-        // assert_eq!(3, history.len());
-        println!("{:?}", history)
+        let one = bank.create_account("X".to_string());
+        assert!(one.is_ok());
+        assert_eq!(1, one.unwrap());
+
+        let two = bank.create_account("Y".to_string());
+        assert!(two.is_ok());
+        assert_eq!(2, two.unwrap());
     }
 }
 
