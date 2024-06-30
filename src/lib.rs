@@ -111,6 +111,25 @@ impl Bank {
         }
     }
 
+    pub fn restore(&mut self, history: &Vec<Operation>) {
+        for operation in history {
+            match operation {
+                Operation::CreateAccount(account) => {
+                    let _ = self.create_account(account.clone());
+                }
+                Operation::IncreaseAccount(account, amount) => {
+                    let _ = self.increase_account(account.clone(), *amount);
+                }
+                Operation::DecreaseAccount(account, amount) => {
+                    let _ = self.decrease_account(account.clone(), *amount).unwrap();
+                }
+                Operation::Transfer(from, to, amount) => {
+                    let _ = self.transfer(from.clone(), to.clone(), *amount);
+                }
+            }
+        }
+    }
+
     fn append_history(&mut self, operation: Operation) -> usize {
         self.history.push(operation);
         return self.history.len() - 1;
@@ -364,5 +383,22 @@ mod tests {
         assert_eq!(Operation::IncreaseAccount("X".to_string(), 10), *history.get(1).unwrap());
         assert_eq!(Operation::DecreaseAccount("X".to_string(), 5), *history.get(2).unwrap());
         assert_eq!(Operation::Transfer("X".to_string(), "Y".to_string(), 5), *history.get(3).unwrap());
+    }
+
+    #[test]
+    fn restore() {
+        let mut bank = Bank::new();
+        let _ = bank.create_account("X".to_string());
+        let _ = bank.create_account("Y".to_string());
+        let _ = bank.increase_account("X".to_string(), 10);
+        let _ = bank.transfer("X".to_string(), "Y".to_string(), 5);
+
+        let mut new_bank = Bank::new();
+        let _ = new_bank.restore(bank.get_history());
+        assert_eq!(4, new_bank.get_history().len());
+        assert_eq!(5, new_bank.get_account_balance("X".to_string()).unwrap());
+        assert_eq!(5, new_bank.get_account_balance("X".to_string()).unwrap());
+
+        assert_eq!(bank.get_history().len(), new_bank.get_history().len());
     }
 }
