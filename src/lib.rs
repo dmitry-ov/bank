@@ -1,5 +1,5 @@
-use std::collections::{HashMap, HashSet};
 use crate::BankError::AccountAlreadyExists;
+use std::collections::{HashMap, HashSet};
 
 type OperationId = usize;
 
@@ -15,9 +15,7 @@ pub struct Bank {
     history: Vec<Operation>,
 }
 
-#[derive(Debug)]
-#[derive(PartialEq)]
-#[derive(Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Operation {
     CreateAccount(String),
     IncreaseAccount(String, i32),
@@ -33,6 +31,12 @@ pub enum BankError {
     TransferToMyself,
 }
 
+impl Default for Bank {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Bank {
     pub fn new() -> Self {
         Bank {
@@ -45,7 +49,10 @@ impl Bank {
 
     pub fn get_account_balance(&self, account: String) -> Result<i32, BankError> {
         if !self.accounts.contains(&account) {
-            return Err(AccountAlreadyExists(format!("Account {} does not exist", account)));
+            return Err(AccountAlreadyExists(format!(
+                "Account {} does not exist",
+                account
+            )));
         }
         let balance = *self.balances.get(&account).unwrap();
         Ok(balance)
@@ -59,7 +66,10 @@ impl Bank {
             self.append_account_index(account, id);
             Ok(id)
         } else {
-            Err(AccountAlreadyExists(format!("Account {} already exists", account)))
+            Err(AccountAlreadyExists(format!(
+                "Account {} already exists",
+                account
+            )))
         }
     }
 
@@ -71,7 +81,7 @@ impl Bank {
     }
 
     pub fn decrease_account(&mut self, account: String, amount: i32) -> Result<usize, BankError> {
-        let value = (-1) * amount;
+        let value = -amount;
         self.update_balance_account(account.clone(), value)?;
         let id = self.append_history(Operation::DecreaseAccount(account.clone(), amount));
         self.append_account_index(account, id);
@@ -82,13 +92,13 @@ impl Bank {
         if from == to {
             Err(BankError::TransferToMyself)
         } else {
-            self.update_balance_account(from.clone(), (-1) * amount)?;
+            self.update_balance_account(from.clone(), -amount)?;
             self.update_balance_account(to.clone(), amount)?;
 
-            let id = self.append_history(Operation::Transfer(from.clone(), to.clone(), amount)); //todo test
+            let id = self.append_history(Operation::Transfer(from.clone(), to.clone(), amount));
 
-            self.append_account_index(from, id); //todo test
-            self.append_account_index(to, id); //todo test
+            self.append_account_index(from, id);
+            self.append_account_index(to, id);
             Ok(())
         }
     }
@@ -98,17 +108,9 @@ impl Bank {
     }
 
     pub fn get_account_history(&self, account: String) -> Option<Vec<Operation>> {
-        let option = self.account_operations_index.get(&account);
-        if option.is_none() {
-            return None;
-        } else {
-            let vec = option.unwrap();
-            let mut result = Vec::new();
-            for id in vec {
-                result.push(self.history.get(*id).unwrap().clone());
-            }
-            return Some(result);
-        }
+        self.account_operations_index
+            .get(&account)
+            .map(|vec| vec.iter().map(|id| self.history[*id].clone()).collect())
     }
 
     pub fn restore(&mut self, history: &Vec<Operation>) {
@@ -132,22 +134,29 @@ impl Bank {
 
     fn append_history(&mut self, operation: Operation) -> usize {
         self.history.push(operation);
-        return self.history.len() - 1;
+        self.history.len() - 1
     }
 
     fn append_account_index(&mut self, account: String, id: usize) {
         if self.account_operations_index.contains_key(&account) {
             //для такого аккаунта есть индекс
-            self.account_operations_index.get_mut(&account).unwrap().push(id);
+            self.account_operations_index
+                .get_mut(&account)
+                .unwrap()
+                .push(id);
         } else {
             //для такого аккаунта еще нет индекса
-            self.account_operations_index.insert(account.clone(), vec![id]);
+            self.account_operations_index
+                .insert(account.clone(), vec![id]);
         }
     }
 
     fn update_balance_account(&mut self, account: String, amount: i32) -> Result<(), BankError> {
         if !self.accounts.contains(&account) {
-            return Err(AccountAlreadyExists(format!("Account {} does not exist", account)));
+            return Err(AccountAlreadyExists(format!(
+                "Account {} does not exist",
+                account
+            )));
         }
 
         if amount == 0 {
@@ -165,7 +174,6 @@ impl Bank {
         Ok(())
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -326,8 +334,19 @@ mod tests {
         let _ = bank.create_account("X".to_string());
 
         let id = 0;
-        assert_eq!(Operation::CreateAccount("X".to_string()), *bank.get_history().get(id).unwrap());
-        assert_eq!(id, *bank.account_operations_index.get("X").unwrap().get(0).unwrap());
+        assert_eq!(
+            Operation::CreateAccount("X".to_string()),
+            *bank.get_history().get(id).unwrap()
+        );
+        assert_eq!(
+            id,
+            *bank
+                .account_operations_index
+                .get("X")
+                .unwrap()
+                .get(0)
+                .unwrap()
+        );
     }
 
     #[test]
@@ -337,8 +356,19 @@ mod tests {
         let _ = bank.increase_account("X".to_string(), 10);
 
         let id = 1;
-        assert_eq!(Operation::IncreaseAccount("X".to_string(), 10), *bank.get_history().get(id).unwrap());
-        assert_eq!(id, *bank.account_operations_index.get("X").unwrap().get(1).unwrap());
+        assert_eq!(
+            Operation::IncreaseAccount("X".to_string(), 10),
+            *bank.get_history().get(id).unwrap()
+        );
+        assert_eq!(
+            id,
+            *bank
+                .account_operations_index
+                .get("X")
+                .unwrap()
+                .get(1)
+                .unwrap()
+        );
     }
 
     #[test]
@@ -349,8 +379,19 @@ mod tests {
         let _ = bank.decrease_account("X".to_string(), 5);
 
         let id = 2;
-        assert_eq!(Operation::DecreaseAccount("X".to_string(), 5), *bank.get_history().get(id).unwrap());
-        assert_eq!(id, *bank.account_operations_index.get("X").unwrap().get(2).unwrap());
+        assert_eq!(
+            Operation::DecreaseAccount("X".to_string(), 5),
+            *bank.get_history().get(id).unwrap()
+        );
+        assert_eq!(
+            id,
+            *bank
+                .account_operations_index
+                .get("X")
+                .unwrap()
+                .get(2)
+                .unwrap()
+        );
     }
 
     #[test]
@@ -362,9 +403,28 @@ mod tests {
         let _ = bank.transfer("X".to_string(), "Y".to_string(), 5);
 
         let id = 3;
-        assert_eq!(Operation::Transfer("X".to_string(), "Y".to_string(), 5), *bank.get_history().get(id).unwrap());
-        assert_eq!(id, *bank.account_operations_index.get("X").unwrap().get(2).unwrap());
-        assert_eq!(id, *bank.account_operations_index.get("Y").unwrap().get(1).unwrap());
+        assert_eq!(
+            Operation::Transfer("X".to_string(), "Y".to_string(), 5),
+            *bank.get_history().get(id).unwrap()
+        );
+        assert_eq!(
+            id,
+            *bank
+                .account_operations_index
+                .get("X")
+                .unwrap()
+                .get(2)
+                .unwrap()
+        );
+        assert_eq!(
+            id,
+            *bank
+                .account_operations_index
+                .get("Y")
+                .unwrap()
+                .get(1)
+                .unwrap()
+        );
 
         println!("{:?}", bank.get_history());
     }
@@ -379,10 +439,29 @@ mod tests {
         let _ = bank.transfer("X".to_string(), "Y".to_string(), 5);
         let history = bank.get_account_history("X".to_string()).unwrap();
         assert_eq!(4, history.len());
-        assert_eq!(Operation::CreateAccount("X".to_string()), *history.get(0).unwrap());
-        assert_eq!(Operation::IncreaseAccount("X".to_string(), 10), *history.get(1).unwrap());
-        assert_eq!(Operation::DecreaseAccount("X".to_string(), 5), *history.get(2).unwrap());
-        assert_eq!(Operation::Transfer("X".to_string(), "Y".to_string(), 5), *history.get(3).unwrap());
+        assert_eq!(
+            Operation::CreateAccount("X".to_string()),
+            *history.get(0).unwrap()
+        );
+        assert_eq!(
+            Operation::IncreaseAccount("X".to_string(), 10),
+            *history.get(1).unwrap()
+        );
+        assert_eq!(
+            Operation::DecreaseAccount("X".to_string(), 5),
+            *history.get(2).unwrap()
+        );
+        assert_eq!(
+            Operation::Transfer("X".to_string(), "Y".to_string(), 5),
+            *history.get(3).unwrap()
+        );
+    }
+
+    #[test]
+    fn get_no_account_history() {
+        let bank = Bank::new();
+        let history = bank.get_account_history("X".to_string());
+        assert!(history.is_none());
     }
 
     #[test]
