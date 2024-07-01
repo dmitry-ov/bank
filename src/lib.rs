@@ -8,7 +8,7 @@ pub struct Bank {
     // Счета
     accounts: HashSet<String>,
     // Балансы
-    balances: HashMap<String, i32>,
+    balances: HashMap<String, u32>,
     // История счета
     account_operations_index: HashMap<String, Vec<OperationId>>,
     // История
@@ -18,16 +18,16 @@ pub struct Bank {
 #[derive(Debug, PartialEq, Clone)]
 pub enum Operation {
     CreateAccount(String),
-    IncreaseAccount(String, i32),
-    DecreaseAccount(String, i32),
-    Transfer(String, String, i32),
+    IncreaseAccount(String, u32),
+    DecreaseAccount(String, u32),
+    Transfer(String, String, u32),
 }
 
 #[derive(Debug)]
 pub enum BankError {
     AccountAlreadyExists(String),
-    IncorrectAmount(i32),
-    InsufficientFunds(i32),
+    IncorrectAmount(u32),
+    InsufficientFunds(u32),
     TransferToMyself,
 }
 
@@ -47,7 +47,7 @@ impl Bank {
         }
     }
 
-    pub fn get_account_balance(&self, account: String) -> Result<i32, BankError> {
+    pub fn get_account_balance(&self, account: String) -> Result<u32, BankError> {
         if !self.accounts.contains(&account) {
             return Err(AccountAlreadyExists(format!(
                 "Account {} does not exist",
@@ -73,34 +73,60 @@ impl Bank {
         }
     }
 
-    pub fn increase_account(&mut self, account: String, amount: i32) -> Result<usize, BankError> {
-        self.update_balance_account(account.clone(), amount)?;
+    pub fn increase_account(&mut self, account: String, amount: u32) -> Result<usize, BankError> {
+        self.check_exists_account(account.clone())?;
+        self.check_zero_amount(amount)?;
+
+        let current_balance = *self.balances.get(&account).unwrap();
+        let new_balance = current_balance + amount;
+        self.balances.insert(account.clone(), new_balance);
+
         let id = self.append_history(Operation::IncreaseAccount(account.clone(), amount));
         self.append_account_index(account, id);
         Ok(id)
     }
 
-    pub fn decrease_account(&mut self, account: String, amount: i32) -> Result<usize, BankError> {
-        let value = -amount;
-        self.update_balance_account(account.clone(), value)?;
+    pub fn decrease_account(&mut self, account: String, amount: u32) -> Result<usize, BankError> {
+        self.check_exists_account(account.clone())?;
+        self.check_zero_amount(amount)?;
+
+        let current_balance = *self.balances.get(&account).unwrap();
+        if current_balance < amount {
+            return Err(BankError::InsufficientFunds(amount));
+        }
+
+        let new_balance = current_balance - amount;
+        self.balances.insert(account.clone(), new_balance);
         let id = self.append_history(Operation::DecreaseAccount(account.clone(), amount));
         self.append_account_index(account, id);
         Ok(id)
     }
 
-    pub fn transfer(&mut self, from: String, to: String, amount: i32) -> Result<(), BankError> {
+    pub fn transfer(&mut self, from: String, to: String, amount: u32) -> Result<(), BankError> {
         if from == to {
-            Err(BankError::TransferToMyself)
-        } else {
-            self.update_balance_account(from.clone(), -amount)?;
-            self.update_balance_account(to.clone(), amount)?;
-
-            let id = self.append_history(Operation::Transfer(from.clone(), to.clone(), amount));
-
-            self.append_account_index(from, id);
-            self.append_account_index(to, id);
-            Ok(())
+            return Err(BankError::TransferToMyself)
         }
+
+        self.check_exists_account(from.clone())?;
+        self.check_exists_account(to.clone())?;
+        self.check_zero_amount(amount)?;
+
+        let current_balance_from = *self.balances.get(&from.clone()).unwrap();
+        if current_balance_from < amount {
+            return Err(BankError::InsufficientFunds(amount));
+        }
+        let new_balance_from = current_balance_from - amount;
+        self.balances.insert(from.clone(), new_balance_from);
+
+        let current_balance_to = *self.balances.get(&to.clone()).unwrap();
+        let new_balance_to = current_balance_to + amount;
+        self.balances.insert(to.clone(), new_balance_to);
+
+        let id = self.append_history(Operation::Transfer(from.clone(), to.clone(), amount));
+
+        self.append_account_index(from, id);
+        self.append_account_index(to, id);
+        Ok(())
     }
 
     pub fn get_history(&self) -> &Vec<Operation> {
@@ -132,6 +158,20 @@ impl Bank {
         }
     }
 
+    fn check_zero_amount(&self, amount: u32) -> Result<(), BankError> {
+        if amount == 0 {
+            return Err(BankError::IncorrectAmount(amount));
+        }
+        Ok(())
+    }
+
+    fn check_exists_account(&mut self, account: String) -> Result<(), BankError> {
+        if !self.accounts.contains(&account) {
+            return Err(AccountAlreadyExists(format!("Account {} does not exist", account)));
+        }
+        Ok(())
+    }
+
     fn append_history(&mut self, operation: Operation) -> usize {
         self.history.push(operation);
         self.history.len() - 1
@@ -149,29 +189,6 @@ impl Bank {
             self.account_operations_index
                 .insert(account.clone(), vec![id]);
         }
-    }
-
-    fn update_balance_account(&mut self, account: String, amount: i32) -> Result<(), BankError> {
-        if !self.accounts.contains(&account) {
-            return Err(AccountAlreadyExists(format!(
-                "Account {} does not exist",
-                account
-            )));
-        }
-
-        if amount == 0 {
-            return Err(BankError::IncorrectAmount(amount));
-        }
-
-        let current_balance = *self.balances.get(&account).unwrap();
-        let new_balance = current_balance + amount;
-
-        if new_balance < 0 {
-            return Err(BankError::InsufficientFunds(amount));
-        }
-
-        self.balances.insert(account.clone(), new_balance);
-        Ok(())
     }
 }
 
@@ -425,8 +442,6 @@ mod tests {
                 .get(1)
                 .unwrap()
         );
-
-        println!("{:?}", bank.get_history());
     }
 
     #[test]
